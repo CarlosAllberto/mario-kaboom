@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+  <title>kaboom</title>
+  <meta charset="utf-8">
+  <style>
+    * {
+      margin: 0;
+    }
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+<script src="https://kaboomjs.com/lib/0.5.0/kaboom.js"></script>
+<script src="https://kaboomjs.com/lib/0.5.0/plugins/aseprite.js"></script>
+<script src="https://kaboomjs.com/lib/0.5.0/plugins/pedit.js"></script>
+<script src="https://kaboomjs.com/pub/legacy/kbmsprite.js"></script>
+
+<script>
+
+kaboom({
+  ...{"fullscreen":true,"width":400,"height":400,"scale":1,"startScene":"main","version":"0.5.0","clearColor":[0,0,0,1]},
+  global: true,
+  plugins: [ peditPlugin, asepritePlugin, kbmspritePlugin ],
+});
+loadSprite("block", "sprites/SMW_Rotating_Block_Sprite.png");
+loadSprite("brick", "sprites/brick.png");
+loadSprite("coin", "sprites/CoinSMW.gif");
+loadSprite("koopa-green", "sprites/KoopaGreenL.gif");
+loadSprite("koopa-green-small", "sprites/UnshelledKoopaGreenL.gif")
+loadSprite("mario-standing", "sprites/SMWSmallMarioSprite.png");
+loadSprite("mushroom", "sprites/MushroomSMW.png");
+loadSprite("pipe-left", "sprites/pipe-left.png");
+loadSprite("pipe-right", "sprites/pipe-right.png");
+loadSprite("pipe-top-left-side", "sprites/pipe-top-left-side.png");
+loadSprite("pipe-top-right-side", "sprites/pipe-top-right-side.png");
+loadSprite("question", "sprites/QuestionBlock.gif");
+loadSprite("unboxed", "sprites/SMW_Empty_Block.png");
+scene("lose", (args = {}) => {
+add([
+  text(args.score),
+  origin('center'),
+  pos(width()/2, height()/2),
+  scale(10)
+])
+});
+scene("main", (args = {}) => {
+var MOVE_SPEED = 80
+var JUMP_FORCE = 400
+const BIG_JUMP_FORCE = 400
+let CURRENT_JUMP_FORCE = JUMP_FORCE
+const ENEMY_SPEED = 60
+const FALL_DEATH = 600
+let isJumping = true
+
+layers(['obj', 'ui'], 'obj')
+
+const maps = [
+  [
+    '£                                                      £',
+    '£                                                      £',
+    '£                                                      £',
+    '£                    }     }                           £',
+    '£                                            -+        £',
+    '£                                    ^       ()        £',
+    '£                }              =======    ======      £',
+    '£                                                      £',
+    '£                                                      £',
+    '£                    }                                 £',
+    '£                                                      £',
+    '£                                                      £',
+    '£                        }                             £',
+    '£                                                      £',
+    '£                    ^                                 £',
+    '£                    }                                 £',
+    '£                                                      £',
+    '£       *==*=                                          £',
+    '£                }                                     £',
+    '£                                                      £',
+    '£                       ^             ^                £',
+    'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz',
+  ], 
+  [
+    '£                                                      £',
+    '£                                                      £',
+    '£                                                      £',
+    '£                    }     }                           £',
+    '£                                            -+        £',
+    '£                                            ()        £',
+    '£                }              zzzzzzz    zzzzzz      £',
+    '£                                                      £',
+    '£                                                      £',
+    '£                    }                                 £',
+    '£                                                      £',
+    '£                                                      £',
+    '£                        }                             £',
+    '£                                                      £',
+    '£                                                      £',
+    '£                    }                                 £',
+    '£                                                      £',
+    '£       *==*=                                          £',
+    '£                }                                     £',
+    '£                                                      £',
+    '£      !     ^          ^             ^                £',
+    'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz',
+  ]
+]
+
+
+const levelCfg = {
+  width: 20,
+  height: 20,
+  '£' : [sprite('block'), scale(1.4), solid()],
+  'z' : [sprite('brick'), scale(1.4), solid()],
+  '$' : [sprite('coin'), 'coin'],
+  '%' : [sprite('question'), scale(1.4), 'coin-surprise', solid()],
+  '*' : [sprite('question'), scale(1.4), 'mushroom-surprise', solid()],   
+  '}' : [sprite('unboxed'), scale(1.4), solid()], 
+  '(' : [sprite('pipe-left'), scale(0.5), solid()],
+  ')' : [sprite('pipe-right'), scale(0.5), solid()], 
+  '-' : [sprite('pipe-top-left-side'), scale(0.5), solid(), 'pipe'],
+  '+' : [sprite('pipe-top-right-side'), scale(0.5), solid(), 'pipe'], 
+  '^' : [sprite('koopa-green'), 'dangerous', body()], 
+  '~' : [sprite('koopa-green-small'), 'dangerous-small', body()],
+  '#' : [sprite('mushroom'), 'mushroom', body()], 
+}
+
+const levelIndex = args.level ?? 0 
+const gameLevel = addLevel(maps[levelIndex], levelCfg)
+
+const scoreGlobal = args.score ?? 0
+const scoreLabel = add([
+  text(scoreGlobal),
+  pos(30,6),
+  layer('ui'),
+  {
+    value: scoreGlobal,
+  }
+])
+
+add([text('level ' + parseInt(levelIndex + 1)), pos(40, 6)])
+
+function big() {
+  let timer = 0
+  let isBig = false
+  return {
+    update() {
+      if (isBig) {
+        timer -=dt()
+        if (timer <=0) {
+          this.smallify()
+        }
+      }
+    },
+    isBig() {
+      return isBig
+    },
+    smallify() {
+      this.scale = vec2(1)
+      timer = 0
+      isBig = false
+      CURRENT_JUMP_FORCE = JUMP_FORCE
+    },
+    biggify(time) {
+      this.scale = vec2(2)
+      timer = time
+      isBig = true
+      CURRENT_JUMP_FORCE = BIG_JUMP_FORCE
+    }
+  }
+}
+
+const player = add([
+  sprite('mario-standing'),
+  pos(30,0),
+  body(),
+  big(),
+  origin('bot')
+])
+
+player.collides('dangerous', (d) => {
+  if(isJumping) {
+    enemyPos = d
+    player.jump(250)
+    destroy(d)
+    gameLevel.spawn('~', d.gridPos.sub(0, 0))
+  } else {
+     go('lose', { score: scoreLabel.value}) 
+  }
+})
+
+player.collides('dangerous-small', (d) => {
+  if(isJumping) {
+    player.jump(250)
+    destroy(d)
+  } else {
+     go('lose', { score: scoreLabel.value}) 
+  }
+})
+
+player.action(() => {
+  camPos(player.pos)
+  if (player.pos.y >= FALL_DEATH) {
+    go('lose', { score: scoreLabel.value })
+  }
+})
+
+keyDown('a', () => {
+  player.move(-MOVE_SPEED, 0)
+})
+
+keyDown('d', () => {
+  player.move(MOVE_SPEED, 0)
+})
+
+keyPress('k', () => {
+  MOVE_SPEED = 180
+})
+
+keyRelease('k', () => {
+  MOVE_SPEED = 80
+})
+
+player.action(() => {
+  if(player.grounded()) {
+    isJumping = false
+  }
+})
+
+keyPress('space', () => {
+  if (player.grounded()) {
+    isJumping = true
+    player.jump(CURRENT_JUMP_FORCE)
+  }
+})
+
+player.on('headbump', (obj) => {
+  if(obj.is('coin-surprise')) {
+    gameLevel.spawn('$', obj.gridPos.sub(0,1))
+    destroy(obj)
+    gameLevel.spawn('}', obj.gridPos.sub(0,0))
+  }
+  if(obj.is('mushroom-surprise')) {
+    gameLevel.spawn('#', obj.gridPos.sub(0,1))
+    destroy(obj)
+    gameLevel.spawn('}', obj.gridPos.sub(0,0))
+  }
+})
+
+action('mushroom', (m) => {
+  m.move(20, 0)
+})
+
+player.collides('mushroom', (m) => {
+  player.biggify(6)
+  destroy(m)
+})
+
+player.collides('coin', (c) => {
+  scoreLabel.value++
+  scoreLabel.text = scoreLabel.value
+  destroy(c)
+})
+
+action('dangerous', (d) => {
+  d.move(-ENEMY_SPEED,0)
+})
+action('dangerous-small', (d) => {
+  d.move(-ENEMY_SPEED,0)
+})
+
+player.collides('pipe', () => {
+  keyPress('s', () => {
+    go('main', {
+      level: (levelIndex + 1) % maps.length,
+      score: scoreLabel.value
+    })
+  })
+})
+
+});
+start("main");
+
+  </script>
+</body>
+
+</html>
