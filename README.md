@@ -1,4 +1,6 @@
 # mario-kaboom
 game mario create with kaboom js
 
-<img widht="50%" src="./image.png"/>
+<div align="center">
+    <img width="50%" src="./image.png"/>
+</div>
